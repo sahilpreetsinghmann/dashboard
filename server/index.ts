@@ -2,6 +2,8 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { handleDemo } from "./routes/demo";
+import { handleLTPHubData } from "./routes/ltp-hub";
+import { handleAFEData } from "./routes/afe-data";
 
 export function createServer() {
   const app = express();
