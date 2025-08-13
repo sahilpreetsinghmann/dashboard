@@ -57,6 +57,14 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        dashboard: {
+          blue: "hsl(217 91% 60%)",
+          green: "hsl(142 76% 36%)",
+          purple: "hsl(262 83% 58%)",
+          orange: "hsl(25 95% 53%)",
+          indigo: "hsl(239 84% 67%)",
+          red: "hsl(0 84% 60%)",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
