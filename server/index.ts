@@ -25,6 +25,7 @@ export function createServer() {
   // Dashboard data endpoints
   app.get("/api/ltp-hub", handleLTPHubData);
   app.get("/api/afe-data", handleAFEData);
+  app.get("/api/file-info", handleFileInfo);
 
   return app;
 }
