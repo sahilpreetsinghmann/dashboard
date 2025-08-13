@@ -4,6 +4,7 @@ import cors from "cors";
 import { handleDemo } from "./routes/demo";
 import { handleLTPHubData } from "./routes/ltp-hub";
 import { handleAFEData } from "./routes/afe-data";
+import { handleFileInfo } from "./routes/file-info";
 
 export function createServer() {
   const app = express();
