@@ -21,5 +21,9 @@ export function createServer() {
 
   app.get("/api/demo", handleDemo);
 
+  // Dashboard data endpoints
+  app.get("/api/ltp-hub", handleLTPHubData);
+  app.get("/api/afe-data", handleAFEData);
+
   return app;
 }
