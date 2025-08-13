@@ -1,112 +1,83 @@
 import { RequestHandler } from "express";
+import * as fs from 'fs';
+import * as path from 'path';
 
 export interface LTPHubData {
-  "Project #": string;
-  "Project Name": string;
-  Status: string;
-  "Target Date": string;
-  "PJM #": string;
-  Planner: string;
-  Region: string;
-  "Total Load Projection": string;
-  "Five Year Load Projection": string;
-  "Est. Budget": string;
-  "Customer Contact Name": string;
-  "Customer Contact Email": string;
-  "DP Request Date": string;
+  'Project #': string;
+  'Project Name': string;
+  'Status': string;
+  'Target Date': string;
+  'PJM #': string;
+  'Planner': string;
+  'Region': string;
+  'Total Load Projection': string;
+  'Five Year Load Projection': string;
+  'Est. Budget': string;
+  'Customer Contact Name': string;
+  'Customer Contact Email': string;
+  'DP Request Date': string;
 }
 
-// Sample LTP Hub data - replace with actual data source
-const sampleLTPData: LTPHubData[] = [
-  {
-    "Project #": "LTP-001",
-    "Project Name": "Data Center Alpha Connection",
-    Status: "Active",
-    "Target Date": "2024-06-15",
-    "PJM #": "PJM-2024-001",
-    Planner: "John Smith",
-    Region: "North",
-    "Total Load Projection": "150",
-    "Five Year Load Projection": "200",
-    "Est. Budget": "2500000",
-    "Customer Contact Name": "Alice Johnson",
-    "Customer Contact Email": "alice@datacenter.com",
-    "DP Request Date": "2024-01-15",
-  },
-  {
-    "Project #": "LTP-002",
-    "Project Name": "Industrial Complex Beta",
-    Status: "Planning",
-    "Target Date": "2024-08-30",
-    "PJM #": "PJM-2024-002",
-    Planner: "Sarah Davis",
-    Region: "South",
-    "Total Load Projection": "300",
-    "Five Year Load Projection": "350",
-    "Est. Budget": "4200000",
-    "Customer Contact Name": "Bob Wilson",
-    "Customer Contact Email": "bob@industrial.com",
-    "DP Request Date": "2024-02-01",
-  },
-  {
-    "Project #": "LTP-003",
-    "Project Name": "Manufacturing Hub Gamma",
-    Status: "Active",
-    "Target Date": "2024-07-20",
-    "PJM #": "PJM-2024-003",
-    Planner: "Mike Johnson",
-    Region: "East",
-    "Total Load Projection": "225",
-    "Five Year Load Projection": "275",
-    "Est. Budget": "3100000",
-    "Customer Contact Name": "Carol Brown",
-    "Customer Contact Email": "carol@manufacturing.com",
-    "DP Request Date": "2024-01-30",
-  },
-  {
-    "Project #": "LTP-004",
-    "Project Name": "Tech Campus Delta",
-    Status: "Pending",
-    "Target Date": "2024-09-15",
-    "PJM #": "PJM-2024-004",
-    Planner: "John Smith",
-    Region: "West",
-    "Total Load Projection": "400",
-    "Five Year Load Projection": "500",
-    "Est. Budget": "5800000",
-    "Customer Contact Name": "David Lee",
-    "Customer Contact Email": "david@techcampus.com",
-    "DP Request Date": "2024-02-15",
-  },
-  {
-    "Project #": "LTP-005",
-    "Project Name": "Logistics Center Epsilon",
-    Status: "Active",
-    "Target Date": "2024-10-01",
-    "PJM #": "PJM-2024-005",
-    Planner: "Sarah Davis",
-    Region: "Central",
-    "Total Load Projection": "180",
-    "Five Year Load Projection": "220",
-    "Est. Budget": "2800000",
-    "Customer Contact Name": "Emma Garcia",
-    "Customer Contact Email": "emma@logistics.com",
-    "DP Request Date": "2024-03-01",
-  },
-];
+function parseCSV(csvContent: string): LTPHubData[] {
+  const lines = csvContent.split('\n');
+  if (lines.length < 2) return [];
+  
+  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+  const data: LTPHubData[] = [];
+  
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    
+    // Handle CSV parsing with proper comma handling (basic implementation)
+    const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+    
+    if (values.length >= headers.length) {
+      const row: any = {};
+      headers.forEach((header, index) => {
+        row[header] = values[index] || '';
+      });
+      
+      // Only include rows that have a Project # (primary identifier)
+      if (row['Project #']) {
+        data.push(row as LTPHubData);
+      }
+    }
+  }
+  
+  return data;
+}
 
 export const handleLTPHubData: RequestHandler = (req, res) => {
   try {
-    // In a real application, this would fetch from a database
+    const csvFilePath = path.join(__dirname, '..', 'data', 'ltphub.csv');
+    
+    // Check if file exists
+    if (!fs.existsSync(csvFilePath)) {
+      return res.status(404).json({
+        success: false,
+        error: 'LTP Hub CSV file not found',
+        path: csvFilePath
+      });
+    }
+    
+    // Read and parse CSV file
+    const csvContent = fs.readFileSync(csvFilePath, 'utf-8');
+    const data = parseCSV(csvContent);
+    
     res.json({
       success: true,
-      data: sampleLTPData,
-      count: sampleLTPData.length,
+      data: data,
+      count: data.length,
+      source: 'ltphub.csv'
     });
+    
   } catch (error) {
+    console.error('Error reading LTP Hub CSV:', error);
     res.status(500).json({
       success: false,
-      error: "Failed to fetch LTP Hub data",
+      error: 'Failed to read LTP Hub CSV file',
+      details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 };
