@@ -1,82 +1,84 @@
 import { RequestHandler } from "express";
+import * as fs from 'fs';
+import * as path from 'path';
 
 export interface AFEData {
-  ID: string;
-  Title: string;
-  "Date Created": string;
-  "AFE Status": string;
-  "ET Planner": string;
-  "Project Number": string;
-  "Project Title": string;
-  "CPR Target Date": string;
-  "CPR Est Project Cost": string;
-  "AFE Target Date": string;
-  "Est. Project Cost": string;
-  "Final Approval Date": string;
-  Submit: string;
+  'ID': string;
+  'Title': string;
+  'Date Created': string;
+  'AFE Status': string;
+  'ET Planner': string;
+  'Project Number': string;
+  'Project Title': string;
+  'CPR Target Date': string;
+  'CPR Est Project Cost': string;
+  'AFE Target Date': string;
+  'Est. Project Cost': string;
+  'Final Approval Date': string;
+  'Submit': string;
 }
 
-// Sample AFE data - replace with actual data source
-const sampleAFEData: AFEData[] = [
-  {
-    ID: "AFE-001",
-    Title: "Data Center Alpha AFE",
-    "Date Created": "2024-02-01",
-    "AFE Status": "Approved",
-    "ET Planner": "John Smith",
-    "Project Number": "LTP-001",
-    "Project Title": "Data Center Alpha Connection",
-    "CPR Target Date": "2024-05-15",
-    "CPR Est Project Cost": "2500000",
-    "AFE Target Date": "2024-06-15",
-    "Est. Project Cost": "2500000",
-    "Final Approval Date": "2024-02-15",
-    Submit: "2024-02-01",
-  },
-  {
-    ID: "AFE-002",
-    Title: "Industrial Complex Beta AFE",
-    "Date Created": "2024-02-20",
-    "AFE Status": "In Review",
-    "ET Planner": "Sarah Davis",
-    "Project Number": "LTP-002",
-    "Project Title": "Industrial Complex Beta",
-    "CPR Target Date": "2024-07-30",
-    "CPR Est Project Cost": "4200000",
-    "AFE Target Date": "2024-08-30",
-    "Est. Project Cost": "4200000",
-    "Final Approval Date": "",
-    Submit: "2024-02-20",
-  },
-  {
-    ID: "AFE-003",
-    Title: "Manufacturing Hub Gamma AFE",
-    "Date Created": "2024-02-15",
-    "AFE Status": "Approved",
-    "ET Planner": "Mike Johnson",
-    "Project Number": "LTP-003",
-    "Project Title": "Manufacturing Hub Gamma",
-    "CPR Target Date": "2024-06-20",
-    "CPR Est Project Cost": "3100000",
-    "AFE Target Date": "2024-07-20",
-    "Est. Project Cost": "3100000",
-    "Final Approval Date": "2024-03-01",
-    Submit: "2024-02-15",
-  },
-];
+function parseIQY(iqyContent: string): AFEData[] {
+  // IQY files are typically CSV-like format, so we can use similar parsing
+  const lines = iqyContent.split('\n');
+  if (lines.length < 2) return [];
+  
+  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+  const data: AFEData[] = [];
+  
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    
+    // Handle CSV-like parsing with proper comma handling
+    const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+    
+    if (values.length >= headers.length) {
+      const row: any = {};
+      headers.forEach((header, index) => {
+        row[header] = values[index] || '';
+      });
+      
+      // Only include rows that have an ID (primary identifier)
+      if (row['ID']) {
+        data.push(row as AFEData);
+      }
+    }
+  }
+  
+  return data;
+}
 
 export const handleAFEData: RequestHandler = (req, res) => {
   try {
-    // In a real application, this would fetch from a database
+    const iqyFilePath = path.join(__dirname, '..', 'data', 'AFE_data.iqy');
+    
+    // Check if file exists
+    if (!fs.existsSync(iqyFilePath)) {
+      return res.status(404).json({
+        success: false,
+        error: 'AFE IQY file not found',
+        path: iqyFilePath
+      });
+    }
+    
+    // Read and parse IQY file
+    const iqyContent = fs.readFileSync(iqyFilePath, 'utf-8');
+    const data = parseIQY(iqyContent);
+    
     res.json({
       success: true,
-      data: sampleAFEData,
-      count: sampleAFEData.length,
+      data: data,
+      count: data.length,
+      source: 'AFE_data.iqy'
     });
+    
   } catch (error) {
+    console.error('Error reading AFE IQY file:', error);
     res.status(500).json({
       success: false,
-      error: "Failed to fetch AFE data",
+      error: 'Failed to read AFE IQY file',
+      details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 };
