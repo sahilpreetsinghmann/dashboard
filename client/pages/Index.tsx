@@ -1,61 +1,11 @@
-import React, { useState, useCallback } from 'react';
-import { Upload, FileText, Activity, DollarSign, Clock, Users, TrendingUp, AlertCircle } from 'lucide-react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { Activity, DollarSign, Clock, Users, TrendingUp, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-
-interface LTPHubData {
-  'Project #': string;
-  'Project Name': string;
-  'Status': string;
-  'Target Date': string;
-  'PJM #': string;
-  'Planner': string;
-  'Region': string;
-  'Total Load Projection': string;
-  'Five Year Load Projection': string;
-  'Est. Budget': string;
-  'Customer Contact Name': string;
-  'Customer Contact Email': string;
-  'DP Request Date': string;
-}
-
-interface AFEData {
-  'ID': string;
-  'Title': string;
-  'Date Created': string;
-  'AFE Status': string;
-  'ET Planner': string;
-  'Project Number': string;
-  'Project Title': string;
-  'CPR Target Date': string;
-  'CPR Est Project Cost': string;
-  'AFE Target Date': string;
-  'Est. Project Cost': string;
-  'Final Approval Date': string;
-  'Submit': string;
-}
-
-interface DashboardMetrics {
-  totalGigawattsRequested: number;
-  totalGigawattsSubmitted: number;
-  totalRevenueRequested: number;
-  totalRevenuePlanned: number;
-  totalRequests: number;
-  pendingRequests: number;
-  avgTimeToPlan: number;
-}
-
-interface PlannerStats {
-  name: string;
-  completedProjects: number;
-  totalLoadConnected: number;
-  totalRevenueConnected: number;
-  avgTimeToComplete: number;
-}
+import { LTPHubData, AFEData, LTPHubResponse, AFEDataResponse, DashboardMetrics, PlannerStats } from '@shared/api';
 
 export default function Index() {
   const [ltpData, setLtpData] = useState<LTPHubData[]>([]);
@@ -65,27 +15,7 @@ export default function Index() {
   const [selectedPlanner, setSelectedPlanner] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
-
-  const parseCSV = useCallback((text: string): any[] => {
-    const lines = text.split('\n');
-    if (lines.length < 2) return [];
-    
-    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-    const data = [];
-    
-    for (let i = 1; i < lines.length; i++) {
-      if (lines[i].trim()) {
-        const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-        const row: any = {};
-        headers.forEach((header, index) => {
-          row[header] = values[index] || '';
-        });
-        data.push(row);
-      }
-    }
-    
-    return data;
-  }, []);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const calculateMetrics = useCallback((ltpData: LTPHubData[], afeData: AFEData[]): DashboardMetrics => {
     // Calculate total gigawatts requested from LTP hub
@@ -212,28 +142,45 @@ export default function Index() {
     return Array.from(plannerMap.values()).sort((a, b) => b.completedProjects - a.completedProjects);
   }, []);
 
-  const handleFileUpload = useCallback(async (file: File, type: 'ltp' | 'afe') => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     setError('');
     
     try {
-      const text = await file.text();
-      const data = parseCSV(text);
-      
-      if (type === 'ltp') {
-        setLtpData(data as LTPHubData[]);
-      } else {
-        setAfeData(data as AFEData[]);
+      const [ltpResponse, afeResponse] = await Promise.all([
+        fetch('/api/ltp-hub'),
+        fetch('/api/afe-data')
+      ]);
+
+      if (!ltpResponse.ok || !afeResponse.ok) {
+        throw new Error('Failed to fetch data from server');
       }
+
+      const ltpResult: LTPHubResponse = await ltpResponse.json();
+      const afeResult: AFEDataResponse = await afeResponse.json();
+
+      if (!ltpResult.success || !afeResult.success) {
+        throw new Error('Server returned error response');
+      }
+
+      setLtpData(ltpResult.data);
+      setAfeData(afeResult.data);
+      setLastUpdated(new Date());
+      
     } catch (err) {
-      setError(`Error parsing ${type === 'ltp' ? 'LTP Hub' : 'AFE'} file: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setError(`Failed to load dashboard data: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setIsLoading(false);
     }
-  }, [parseCSV]);
+  }, []);
+
+  // Load data on component mount
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   // Recalculate metrics when data changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (ltpData.length > 0 && afeData.length > 0) {
       const newMetrics = calculateMetrics(ltpData, afeData);
       const newPlannerStats = calculatePlannerStats(ltpData, afeData);
@@ -248,80 +195,69 @@ export default function Index() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-2">
-            Project Analytics Dashboard
-          </h1>
-          <p className="text-slate-600 dark:text-slate-400">
-            Upload your LTP Hub and AFE data files to view comprehensive project analytics
-          </p>
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-2">
+              Project Analytics Dashboard
+            </h1>
+            <p className="text-slate-600 dark:text-slate-400">
+              Real-time project analytics from LTP Hub and AFE data
+            </p>
+          </div>
+          <div className="flex items-center gap-4">
+            {lastUpdated && (
+              <div className="text-sm text-slate-500 dark:text-slate-400">
+                Last updated: {lastUpdated.toLocaleTimeString()}
+              </div>
+            )}
+            <Button
+              onClick={fetchData}
+              disabled={isLoading}
+              variant="outline"
+              size="sm"
+              className="gap-2"
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Refresh Data
+            </Button>
+          </div>
         </div>
 
-        {/* File Upload Section */}
-        <div className="grid md:grid-cols-2 gap-6 mb-8">
-          <Card className="border-dashed border-2 border-blue-200 dark:border-blue-800 hover:border-blue-300 dark:hover:border-blue-700 transition-colors">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-blue-600" />
-                LTP Hub Data
-              </CardTitle>
-              <CardDescription>Upload your ltp hub.csv file</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-center w-full">
-                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-blue-300 border-dashed rounded-lg cursor-pointer bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-950/40 transition-colors">
-                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    <Upload className="w-8 h-8 mb-2 text-blue-500" />
-                    <p className="text-sm text-blue-600 dark:text-blue-400">
-                      {ltpData.length > 0 ? `${ltpData.length} records loaded` : 'Click to upload LTP Hub CSV'}
-                    </p>
-                  </div>
-                  <input 
-                    type="file" 
-                    className="hidden" 
-                    accept=".csv,.iqy"
-                    onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'ltp')}
-                  />
-                </label>
-              </div>
-              {ltpData.length > 0 && (
-                <Badge variant="secondary" className="mt-2">
-                  ✓ {ltpData.length} projects loaded
+        {/* Data Status */}
+        <div className="grid md:grid-cols-2 gap-4 mb-8">
+          <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-blue-900 dark:text-blue-100">LTP Hub Data</h3>
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    {ltpData.length} projects loaded
+                  </p>
+                </div>
+                <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                  ✓ Connected
                 </Badge>
-              )}
+              </div>
             </CardContent>
           </Card>
 
-          <Card className="border-dashed border-2 border-green-200 dark:border-green-800 hover:border-green-300 dark:hover:border-green-700 transition-colors">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-green-600" />
-                AFE Data
-              </CardTitle>
-              <CardDescription>Upload your AFE data.iqy file</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-center w-full">
-                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-green-300 border-dashed rounded-lg cursor-pointer bg-green-50 dark:bg-green-950/20 hover:bg-green-100 dark:hover:bg-green-950/40 transition-colors">
-                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    <Upload className="w-8 h-8 mb-2 text-green-500" />
-                    <p className="text-sm text-green-600 dark:text-green-400">
-                      {afeData.length > 0 ? `${afeData.length} records loaded` : 'Click to upload AFE Data IQY'}
-                    </p>
-                  </div>
-                  <input 
-                    type="file" 
-                    className="hidden" 
-                    accept=".csv,.iqy"
-                    onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'afe')}
-                  />
-                </label>
-              </div>
-              {afeData.length > 0 && (
-                <Badge variant="secondary" className="mt-2">
-                  ✓ {afeData.length} AFE records loaded
+          <Card className="border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-green-900 dark:text-green-100">AFE Data</h3>
+                  <p className="text-sm text-green-700 dark:text-green-300">
+                    {afeData.length} records loaded
+                  </p>
+                </div>
+                <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                  ✓ Connected
                 </Badge>
-              )}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -335,8 +271,23 @@ export default function Index() {
           </Alert>
         )}
 
+        {/* Loading State */}
+        {isLoading && !metrics && (
+          <Card className="text-center py-12">
+            <CardContent>
+              <Loader2 className="h-12 w-12 text-blue-500 mx-auto mb-4 animate-spin" />
+              <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                Loading Dashboard Data
+              </h3>
+              <p className="text-slate-600 dark:text-slate-400">
+                Fetching project analytics from the server...
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Main Dashboard */}
-        {metrics && (
+        {metrics && !isLoading && (
           <>
             {/* Key Metrics Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
@@ -498,16 +449,19 @@ export default function Index() {
           </>
         )}
 
-        {!metrics && ltpData.length === 0 && afeData.length === 0 && (
+        {!metrics && !isLoading && ltpData.length === 0 && afeData.length === 0 && (
           <Card className="text-center py-12">
             <CardContent>
               <Activity className="h-12 w-12 text-slate-400 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                Ready for Data Upload
+                No Data Available
               </h3>
-              <p className="text-slate-600 dark:text-slate-400">
-                Upload both LTP Hub and AFE data files to begin analyzing your project metrics
+              <p className="text-slate-600 dark:text-slate-400 mb-4">
+                Unable to load dashboard data from the server
               </p>
+              <Button onClick={fetchData} variant="outline">
+                Try Again
+              </Button>
             </CardContent>
           </Card>
         )}
