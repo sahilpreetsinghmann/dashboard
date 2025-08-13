@@ -1,10 +1,10 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from "fs";
+import * as path from "path";
 
 export class DataFileManager {
-  private static readonly DATA_DIR = path.join(__dirname, '..', 'data');
-  private static readonly LTP_HUB_FILE = 'ltphub.csv';
-  private static readonly AFE_DATA_FILE = 'AFE_data.iqy';
+  private static readonly DATA_DIR = path.join(__dirname, "..", "data");
+  private static readonly LTP_HUB_FILE = "ltphub.csv";
+  private static readonly AFE_DATA_FILE = "AFE_data.iqy";
 
   /**
    * Get the full path to the LTP Hub CSV file
@@ -43,13 +43,13 @@ export class DataFileManager {
     if (!this.fileExists(filePath)) {
       return null;
     }
-    
+
     const stats = fs.statSync(filePath);
     return {
       size: stats.size,
       modified: stats.mtime,
       created: stats.birthtime,
-      isFile: stats.isFile()
+      isFile: stats.isFile(),
     };
   }
 
@@ -67,18 +67,18 @@ export class DataFileManager {
   static getDataFilesInfo() {
     const ltpPath = this.getLTPHubPath();
     const afePath = this.getAFEDataPath();
-    
+
     return {
       ltpHub: {
         path: ltpPath,
         exists: this.fileExists(ltpPath),
-        stats: this.getFileStats(ltpPath)
+        stats: this.getFileStats(ltpPath),
       },
       afeData: {
         path: afePath,
         exists: this.fileExists(afePath),
-        stats: this.getFileStats(afePath)
-      }
+        stats: this.getFileStats(afePath),
+      },
     };
   }
 
@@ -86,17 +86,23 @@ export class DataFileManager {
    * Backup existing files with timestamp
    */
   static backupFiles(): void {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const ltpPath = this.getLTPHubPath();
     const afePath = this.getAFEDataPath();
-    
+
     if (this.fileExists(ltpPath)) {
-      const backupPath = path.join(this.DATA_DIR, `ltphub_backup_${timestamp}.csv`);
+      const backupPath = path.join(
+        this.DATA_DIR,
+        `ltphub_backup_${timestamp}.csv`,
+      );
       fs.copyFileSync(ltpPath, backupPath);
     }
-    
+
     if (this.fileExists(afePath)) {
-      const backupPath = path.join(this.DATA_DIR, `AFE_data_backup_${timestamp}.iqy`);
+      const backupPath = path.join(
+        this.DATA_DIR,
+        `AFE_data_backup_${timestamp}.iqy`,
+      );
       fs.copyFileSync(afePath, backupPath);
     }
   }
